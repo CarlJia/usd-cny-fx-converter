@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>美元交易明细人民币换算 · USD → CNY</title>
+<meta name="description" content="上传 CSV / XLSX 交易明细，按数据日期当时的美元兑人民币汇率，自动追加「汇率」与「总计 (RMB)」两列。汇率数据来自 frankfurter.dev。">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>💱</text></svg>">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<header class="topbar">
+  <div class="wrap topbar-inner">
+    <div class="brand">
+      <span class="brand-mark">💱</span>
+      <div>
+        <h1>美元交易明细人民币换算</h1>
+        <p>按<b>数据日期当日</b>的美元兑人民币汇率，自动补出「汇率」与「总计 (RMB)」两列</p>
+      </div>
+    </div>
+    <div class="brand-note">
+      汇率来源
+      <a href="https://frankfurter.dev/" target="_blank" rel="noopener noreferrer">frankfurter.dev ↗</a>
+    </div>
+  </div>
+</header>
+
+<main class="wrap">
+
+  <!-- 1 上传 -->
+  <section class="card">
+    <div class="card-head">
+      <span class="step">1</span>
+      <h2>上传交易明细</h2>
+      <span class="hint">支持 .xlsx / .xls / .csv，可一次上传多个文件</span>
+    </div>
+
+    <div id="dropzone" class="dropzone" tabindex="0" role="button" aria-label="选择或拖拽文件">
+      <div class="dz-icon">📄</div>
+      <div class="dz-title">把 CSV / XLSX 文件拖到这里</div>
+      <div class="dz-sub">或 <span class="link">点击选择文件</span>　·　数据仅在本机浏览器解析，不会上传到任何服务器</div>
+      <input id="fileInput" type="file" accept=".csv,.xlsx,.xls,.xlsm,.tsv,text/csv" multiple hidden>
+    </div>
+
+    <div id="fileList" class="file-list"></div>
+  </section>
+
+  <!-- 2 字段映射 -->
+  <section class="card" id="mappingCard" hidden>
+    <div class="card-head">
+      <span class="step">2</span>
+      <h2>确认字段</h2>
+      <span class="hint">核对「日期列」与「美元金额列」，不对可以手动改</span>
+    </div>
+    <div class="table-scroll">
+      <table class="mapping-table">
+        <thead>
+          <tr>
+            <th class="col-on">参与</th>
+            <th>工作表 / 文件</th>
+            <th class="num">行数</th>
+            <th>表头行</th>
+            <th>日期列</th>
+            <th>美元金额列</th>
+          </tr>
+        </thead>
+        <tbody id="mappingBody"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- 3 汇率设置 -->
+  <section class="card" id="settingsCard" hidden>
+    <div class="card-head">
+      <span class="step">3</span>
+      <h2>汇率设置</h2>
+      <span class="hint">按明细里的日期逐日取汇率；遇周末 / 节假日自动沿用最近一个有牌价的日期</span>
+    </div>
+    <div class="settings-grid">
+      <label class="field">
+        <span>原始币种</span>
+        <select id="baseCurrency"></select>
+      </label>
+      <label class="field">
+        <span>目标币种</span>
+        <select id="quoteCurrency"></select>
+      </label>
+      <label class="field">
+        <span>汇率小数位</span>
+        <input id="rateDecimals" type="number" min="0" max="8" step="1" value="4">
+      </label>
+      <label class="field">
+        <span>金额小数位</span>
+        <input id="amountDecimals" type="number" min="0" max="6" step="1" value="2">
+      </label>
+      <label class="field field-check">
+        <input id="showRateDate" type="checkbox" checked>
+        <span>额外显示「汇率取值日」列</span>
+      </label>
+      <label class="field field-check">
+        <input id="useCache" type="checkbox" checked>
+        <span>使用本地汇率缓存</span>
+      </label>
+    </div>
+
+    <div class="actions">
+      <button id="runBtn" class="btn btn-primary" disabled>开始换算</button>
+      <button id="resetBtn" class="btn btn-ghost">清空重来</button>
+      <span id="runStatus" class="run-status"></span>
+    </div>
+  </section>
+
+  <!-- 4 结果 -->
+  <section class="card" id="resultCard" hidden>
+    <div class="card-head">
+      <span class="step">4</span>
+      <h2>换算结果</h2>
+      <span class="hint" id="resultRange"></span>
+    </div>
+
+    <div id="summaryCards" class="summary-cards"></div>
+
+    <details class="sheet-summary" open>
+      <summary>按工作表汇总</summary>
+      <div class="table-scroll">
+        <table class="data-table compact">
+          <thead>
+            <tr><th>工作表</th><th class="num">记录数</th><th class="num">总计 (USD)</th><th class="num">总计 (RMB)</th></tr>
+          </thead>
+          <tbody id="sheetSummaryBody"></tbody>
+        </table>
+      </div>
+    </details>
+
+    <div class="result-toolbar">
+      <div id="tabs" class="tabs"></div>
+      <div class="toolbar-right">
+        <label class="mini-check"><input id="onlyNonExact" type="checkbox"> 只看汇率非当日取值的行</label>
+        <button id="exportXlsxBtn" class="btn btn-primary btn-sm">导出 XLSX</button>
+        <button id="exportCsvBtn" class="btn btn-ghost btn-sm">导出 CSV</button>
+      </div>
+    </div>
+
+    <div class="table-scroll tall">
+      <table class="data-table" id="resultTable">
+        <thead id="resultHead"></thead>
+        <tbody id="resultBody"></tbody>
+      </table>
+    </div>
+    <div id="rowNote" class="row-note"></div>
+  </section>
+
+  <section class="card explain">
+    <div class="card-head">
+      <h2>说明</h2>
+    </div>
+    <ul class="notes">
+      <li><b>汇率口径</b>：取明细日期当天的 USD→CNY 汇率（frankfurter 的日度参考价）。当天没有牌价（周末、节假日）时，沿用最近一个工作日的汇率，并在「汇率取值日」列标出真实取值日期。</li>
+      <li><b>计算公式</b>：<code>总计 (RMB) = 总计 (USD) × 汇率</code>，按设置的小数位四舍五入。</li>
+      <li><b>纯前端</b>：文件解析、计算全部在浏览器本地完成；只有汇率查询会向 <code>api.frankfurter.dev</code> 发起请求，不发送你的明细内容。</li>
+      <li><b>缓存</b>：已查询过的汇率会存在浏览器 localStorage 里，重复换算不会重复请求。</li>
+    </ul>
+  </section>
+
+</main>
+
+<footer class="wrap foot">
+  <span>汇率数据 © <a href="https://frankfurter.dev/" target="_blank" rel="noopener noreferrer">Frankfurter</a>（开源汇率 API，无需密钥）</span>
+  <span>本站为纯静态页面，可部署于 Cloudflare</span>
+</footer>
+
+<script src="vendor/xlsx.full.min.js"></script>
+<script src="core.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

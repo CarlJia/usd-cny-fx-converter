@@ -1,0 +1,17 @@
+{
+  "name": "usd-cny-fx-converter",
+  "version": "1.0.0",
+  "private": true,
+  "description": "纯前端汇率换算工具：上传 CSV / XLSX 交易明细，按数据日期当日汇率补出「汇率」与「总计 (RMB)」两列。汇率数据来自 frankfurter.dev，可部署到 Cloudflare。",
+  "license": "MIT",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "serve": "node scripts/serve.cjs",
+    "convert": "node scripts/convert-cli.cjs",
+    "test": "node --test test/core.test.cjs"
+  },
+  "devDependencies": {
+    "wrangler": "^4"
+  }
+}

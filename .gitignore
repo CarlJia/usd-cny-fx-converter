@@ -1,0 +1,14 @@
+node_modules/
+.wrangler/
+dist/
+*.log
+
+# 命令行版本输出
+outputs/
+
+# 系统文件
+.DS_Store
+Thumbs.db
+
+# 占位文件
+public/vendor/.keep
