@@ -5,6 +5,11 @@
 
 汇率来源：[frankfurter.dev](https://frankfurter.dev/)（开源汇率 API，无需密钥，支持 CORS，浏览器可直接调用）。
 
+[![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/CarlJia/usd-cny-fx-converter)
+
+> **在线体验**：<https://usd-cny-fx-converter.carl-jia.workers.dev>
+> 点上面的按钮，几秒钟就能把它部署到你自己的 Cloudflare 账号。
+
 ---
 
 ## 特性
@@ -87,7 +92,24 @@ node test/verify-output.cjs "outputs/7-9月交易明晰-CNY换算.xlsx"
 
 ## 部署到 Cloudflare
 
-### 方案 A：Workers 静态资源（推荐，本仓库已配好）
+### 方案 A：一键部署（推荐，点按钮就行）
+
+[![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/CarlJia/usd-cny-fx-converter)
+
+点击按钮后 Cloudflare 会自动完成：
+
+1. **克隆仓库** —— 把本项目复制一份到你自己的 GitHub 账号，之后你可以在自己的仓库里继续改；
+2. **确认配置** —— 只需要确认仓库名 / Worker 名，其余留默认即可；
+3. **构建并部署** —— 通过 Workers Builds 执行 `npm run deploy`（即 `npx wrangler deploy`），部署到 `https://<Worker 名>.<你的子域>.workers.dev`；
+4. **开通 CI/CD** —— 之后每次 push 到 `main` 会自动重新部署，向其他分支推送还会生成预览地址。
+
+本项目**没有任何 KV / D1 / R2 绑定，也没有环境变量或密钥**，所以不需要额外配置，一路确认即可完成。
+默认构建命令留空、部署命令 `npx wrangler deploy`，`wrangler.jsonc` 里的 `assets.directory` 已指向 `./public`。
+
+> 前提：Deploy to Cloudflare 按钮只支持 **Workers 应用**（本项目正是 Worker + 静态资源，不是 Pages 项目），
+> 且仓库必须是**公开**的 Git 仓库（github.com / gitlab.com）。
+
+### 方案 B：本地命令行部署
 
 ```bash
 npx wrangler login          # 首次需要授权
@@ -95,9 +117,8 @@ npx wrangler deploy
 ```
 
 部署完成后会得到 `https://usd-cny-fx-converter.<你的子域>.workers.dev`。
-`wrangler.jsonc` 里的 `assets.directory` 已指向 `./public`，无需构建步骤。
 
-### 方案 B：Cloudflare Pages
+### 方案 C：Cloudflare Pages
 
 ```bash
 npx wrangler pages deploy public --project-name=usd-cny-fx-converter
@@ -111,7 +132,7 @@ npx wrangler pages deploy public --project-name=usd-cny-fx-converter
 | Build command | 留空 |
 | Build output directory | `public` |
 
-### 方案 C：拖拽上传
+### 方案 D：拖拽上传
 
 Cloudflare 控制台 → Workers & Pages → Create → Pages → **Upload assets**，
 直接把 `public/` 目录整个拖上去即可。
