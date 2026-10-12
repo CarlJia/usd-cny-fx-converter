@@ -8,7 +8,9 @@
 [![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/CarlJia/usd-cny-fx-converter)
 
 > **在线体验**：<https://usd-cny-fx-converter.carl-jia.workers.dev>
-> 点上面的按钮，几秒钟就能把它部署到你自己的 Cloudflare 账号。
+>
+> ℹ️ 上面的按钮是给「想在自己账号里另起一份副本」的人用的 —— 它会**克隆出一个新仓库**。
+> 如果你只是想给**这个**仓库接上「push 后自动部署」，请看下面的 **方案 A**。
 
 ---
 
@@ -50,7 +52,7 @@ fx-converter/
 │   ├── core.test.cjs         # 单元测试（node --test）
 │   └── verify-output.cjs     # 读回导出的 XLSX 做校验
 ├── .github/workflows/
-│   └── deploy.yml            # GitHub Actions：push 到 main 自动部署
+│   └── ci.yml                # GitHub Actions：单元测试（+ 备用的手动部署）
 ├── wrangler.jsonc            # Cloudflare 部署配置
 └── package.json
 ```
@@ -94,61 +96,51 @@ node test/verify-output.cjs "outputs/7-9月交易明晰-CNY换算.xlsx"
 
 ## 部署到 Cloudflare
 
-### 方案 A：一键部署（推荐，点按钮就行）
+### 方案 A：连接 Git 仓库 —— push 后自动部署（推荐）
+
+Workers Builds 可以把一个 Worker 直接绑到一个 Git 仓库，之后 **push 到 `main` 就自动构建并发布**。
+不需要任何 API Token，构建日志在 Cloudflare 面板里看。
+
+**A-1 绑定已有的 Worker（本仓库就是这种情况）**
+
+1. Cloudflare 面板 → **Workers & Pages** → 点进 `usd-cny-fx-converter`；
+2. **Settings** → **Builds** → **Connect**；
+3. 按提示授权 Cloudflare 的 GitHub App（只勾 `usd-cny-fx-converter` 这一个仓库就够），
+   然后选中仓库 `CarlJia/usd-cny-fx-converter`、生产分支 `main`；
+4. 构建配置按下表填写并保存；
+5. 之后随便 push 一次 `main`，就会自动构建并发布。
+
+| 配置项 | 值 | 说明 |
+| --- | --- | --- |
+| Build command | 留空 | 纯静态，没有构建步骤 |
+| Deploy command | `npx wrangler deploy` | 写 `npm run deploy` 也等价，两者指向同一命令 |
+| Root directory | `/` | 仓库根目录 |
+| Production branch | `main` | |
+
+> ⚠️ 面板里 Worker 的名字必须和 `wrangler.jsonc` 里的 `name` **完全一致**
+> （两处都是 `usd-cny-fx-converter`），否则构建会直接失败。
+
+**A-2 从零新建一个 Worker**
+
+Workers & Pages → **Create application** → **Import a repository** → **Get started** →
+选中 Git 账号与仓库 → 填同样的构建配置 → **Save and Deploy**。
+
+**预览部署**：非 `main` 分支的构建不会动线上，而是在 Worker 的 **Previews** 里生成独立预览地址。
+
+### 方案 B：Deploy to Cloudflare 按钮（给别人用）
 
 [![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/CarlJia/usd-cny-fx-converter)
 
-点击按钮后 Cloudflare 会自动完成：
+点击后 Cloudflare 会完成：克隆仓库到**你的**账号 → 确认仓库名 / Worker 名 → 用 Workers Builds
+执行 `npm run deploy` 部署 → 顺带开通 push 自动部署与分支预览。
 
-1. **克隆仓库** —— 把本项目复制一份到你自己的 GitHub 账号，之后你可以在自己的仓库里继续改；
-2. **确认配置** —— 只需要确认仓库名 / Worker 名，其余留默认即可；
-3. **构建并部署** —— 通过 Workers Builds 执行 `npm run deploy`（即 `npx wrangler deploy`），部署到 `https://<Worker 名>.<你的子域>.workers.dev`；
-4. **开通 CI/CD** —— 之后每次 push 到 `main` 会自动重新部署，向其他分支推送还会生成预览地址。
+> ⚠️ **仓库已经在你自己名下时，不要点这个按钮。** 官方文档写明按钮的流程是
+> 「Cloudflare clones your source repository into the user's GitHub/GitLab account」——
+> 它会在**你自己的账号下再克隆出一份副本仓库**，再给那份副本配 Workers Builds。
+> 按钮的本意是让别人「拿来即用」；本仓库自己的部署请走上面的方案 A。
 
-本项目**没有任何 KV / D1 / R2 绑定，也没有环境变量或密钥**，所以不需要额外配置，一路确认即可完成。
-默认构建命令留空、部署命令 `npx wrangler deploy`，`wrangler.jsonc` 里的 `assets.directory` 已指向 `./public`。
-
-> 前提：Deploy to Cloudflare 按钮只支持 **Workers 应用**（本项目正是 Worker + 静态资源，不是 Pages 项目），
-> 且仓库必须是**公开**的 Git 仓库（github.com / gitlab.com）。
-
-### 方案 B：GitHub Actions 自动部署（push 即发布）
-
-仓库里已经放好工作流 `.github/workflows/deploy.yml` —— **push 到 `main` 就自动跑一次 `wrangler deploy`**，
-把最新代码发布到你自己账号下的 Worker。也可以在 Actions 页面手动触发。
-
-| 触发事件 | 行为 |
-| --- | --- |
-| push 到 `main` | 先跑单元测试，通过后执行 `wrangler deploy` 发布到线上 |
-| 向 `main` 提 PR | 只上传预览版本（`wrangler preview`），**不会动线上**，预览地址写在运行摘要里 |
-| 手动触发 | Actions 页面 → 选中工作流 → *Run workflow* |
-
-工作流内置了 `concurrency`，同一分支上新的推送会取消上一次未跑完的部署；测试不通过则不会发布。
-
-**首次使用需要配置 2 个仓库密钥**（Settings → Secrets and variables → Actions → New repository secret）：
-
-| Secret | 值 |
-| --- | --- |
-| `CLOUDFLARE_API_TOKEN` | 具备 **Workers Scripts:Edit** 权限的 API Token |
-| `CLOUDFLARE_ACCOUNT_ID` | 你的 Cloudflare Account ID（`npx wrangler whoami` 可查） |
-
-创建 API Token 的最短路径 —— 下面这个链接已经把**权限和账号预填好**，点开只需 *Continue to summary* → *Create Token*：
-
-<https://dash.cloudflare.com/profile/api-tokens?permissionGroupKeys=%5B%7B%22key%22%3A%22workers_scripts%22%2C%22type%22%3A%22edit%22%7D%5D&accountId=e4a57185c8f9ea8de6a1c8f4cd1c5681&name=github-actions-usd-cny-fx-converter>
-
-也可以直接用 Cloudflare 面板里的模板「**Edit Cloudflare Workers**」。
-
-写入密钥（用 `gh` 命令行，输入的值不会回显，也不会进 shell 历史）：
-
-```bash
-gh secret set CLOUDFLARE_API_TOKEN -R <你的账号>/usd-cny-fx-converter
-gh secret set CLOUDFLARE_ACCOUNT_ID -R <你的账号>/usd-cny-fx-converter
-```
-
-之后随便 push 一次 `main`，或到 Actions 页面手动跑一次即可。
-
-> **和方案 A 的区别**：方案 A 走 Cloudflare 自己的 Workers Builds，构建不在 GitHub 上跑；
-> 方案 B 走 GitHub Actions，日志、权限、触发条件都在你自己的 GitHub 仓库里，
-> 适合想统一在 GitHub 上看 CI，或后面要加 lint / 测试 / 多环境部署的场景。两者可以只选一个。
+按钮只支持 **Workers 应用**（本项目正是 Worker + 静态资源，不是 Pages 项目），
+且源仓库必须是**公开**的 github.com / gitlab.com 仓库。
 
 ### 方案 C：本地命令行部署
 
@@ -178,8 +170,33 @@ npx wrangler pages deploy public --project-name=usd-cny-fx-converter
 Cloudflare 控制台 → Workers & Pages → Create → Pages → **Upload assets**，
 直接把 `public/` 目录整个拖上去即可。
 
-> 说明：本项目是纯静态资源，不需要任何服务端逻辑，也不需要配置 API 密钥。
-> 汇率请求由浏览器直接发往 `api.frankfurter.dev`（该接口响应头为 `Access-Control-Allow-Origin: *`）。
+### 方案 F（可选）：改由 GitHub Actions 部署
+
+`.github/workflows/ci.yml` 保留了这条通道，但**默认关闭**：
+
+- push / PR 触发的只有一个 `单元测试` job，不需要任何密钥；
+- `手动部署到 Worker` 这个 job 只在 Actions 页面手动触发时才跑，需要下面两个密钥。
+
+| Secret | 值 |
+| --- | --- |
+| `CLOUDFLARE_API_TOKEN` | 具备 **Workers Scripts:Edit** 权限的 API Token |
+| `CLOUDFLARE_ACCOUNT_ID` | 你的 Cloudflare Account ID（`npx wrangler whoami` 可查） |
+
+权限与账号都已预填的 Token 创建链接：
+
+<https://dash.cloudflare.com/profile/api-tokens?permissionGroupKeys=%5B%7B%22key%22%3A%22workers_scripts%22%2C%22type%22%3A%22edit%22%7D%5D&accountId=e4a57185c8f9ea8de6a1c8f4cd1c5681&name=github-actions-usd-cny-fx-converter>
+
+写入密钥（用 `gh` 命令行，输入的值不会回显，也不会进 shell 历史）：
+
+```bash
+gh secret set CLOUDFLARE_API_TOKEN -R <你的账号>/usd-cny-fx-converter
+gh secret set CLOUDFLARE_ACCOUNT_ID -R <你的账号>/usd-cny-fx-converter
+```
+
+想让 push 也自动走 GitHub Actions，把 `deploy` job 的 `if` 改成 `github.ref == 'refs/heads/main'` 即可。
+
+> 说明：本项目是纯静态资源，不需要任何服务端逻辑。汇率请求由浏览器直接发往
+> `api.frankfurter.dev`（该接口响应头为 `Access-Control-Allow-Origin: *`）。
 
 ---
 

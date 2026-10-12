@@ -1,0 +1,72 @@
+name: CI
+
+# 线上部署由 Cloudflare Workers Builds 负责（Worker → Settings → Builds → Connect），
+# push 到 main 时 Cloudflare 会自动构建并发布，这里不需要任何密钥。
+#
+# 因此本工作流默认只做两件事：
+#   1) push / PR 时跑单元测试
+#   2) 需要时在 Actions 页面手动触发一次 wrangler deploy（备用通道）
+#
+# 如果要改回「push 就由 GitHub Actions 部署」：
+#   1) 在 Cloudflare 面板创建权限为 Workers Scripts:Edit 的 API Token
+#   2) 仓库 Settings → Secrets and variables → Actions 添加
+#      CLOUDFLARE_API_TOKEN 和 CLOUDFLARE_ACCOUNT_ID
+#   3) 把下方 deploy job 的 if 改成 github.ref == 'refs/heads/main'
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # 单元测试：纯 Node、零依赖，不需要任何密钥
+  test:
+    name: 单元测试
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v7
+
+      - name: 配置 Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+
+      - name: 运行 node:test
+        run: node --test test/core.test.cjs
+
+  # 备用部署通道：只在手动触发时运行，需要 CLOUDFLARE_API_TOKEN 密钥
+  deploy:
+    name: 手动部署到 Worker（备用）
+    needs: test
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      deployments: write # wrangler-action 需要它来写 GitHub Deployment 记录
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v7
+
+      - name: 执行 wrangler deploy
+        id: deploy
+        uses: cloudflare/wrangler-action@v4
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          gitHubToken: ${{ secrets.GITHUB_TOKEN }}
+          wranglerVersion: "4"
+          command: deploy
+
+      - name: 输出部署地址
+        run: |
+          echo "### ✅ 已发布到线上" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "地址：${{ steps.deploy.outputs.deployment-url }}" >> "$GITHUB_STEP_SUMMARY"
