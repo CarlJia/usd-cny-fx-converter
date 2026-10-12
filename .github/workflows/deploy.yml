@@ -1,0 +1,86 @@
+name: Deploy to Cloudflare Workers
+
+# push 到 main 自动发布到自己的 Worker；
+# 提 PR 时上传预览版本（不会影响线上）；
+# 也可以在 Actions 页面手动触发。
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# 同一分支上的部署串行化，新的一次推送会取消上一次未跑完的部署
+concurrency:
+  group: deploy-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # 1) 先跑单元测试，不通过就不发布
+  test:
+    name: 单元测试
+    runs-on: ubuntu-latest
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v7
+
+      - name: 配置 Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+
+      - name: 运行 node:test
+        run: node --test test/core.test.cjs
+
+  # 2) main 分支 → 发布到正式 Worker
+  deploy:
+    name: 发布到线上 Worker
+    needs: test
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v7
+
+      - name: 执行 wrangler deploy
+        id: deploy
+        uses: cloudflare/wrangler-action@v4
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          wranglerVersion: "4"
+          command: deploy
+
+      - name: 输出部署地址
+        run: |
+          echo "### ✅ 已发布到线上" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "地址：${{ steps.deploy.outputs.deployment-url }}" >> "$GITHUB_STEP_SUMMARY"
+
+  # 3) PR → 上传一个预览版本，拿到临时地址用于验证
+  preview:
+    name: 上传预览版本
+    needs: test
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v7
+
+      - name: 执行 wrangler preview
+        id: preview
+        uses: cloudflare/wrangler-action@v4
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          wranglerVersion: "4"
+          command: preview
+
+      - name: 输出预览地址
+        run: |
+          echo "### 🔍 预览版本" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "预览地址：${{ steps.preview.outputs.preview-url }}" >> "$GITHUB_STEP_SUMMARY"

@@ -49,6 +49,8 @@ fx-converter/
 ├── test/
 │   ├── core.test.cjs         # 单元测试（node --test）
 │   └── verify-output.cjs     # 读回导出的 XLSX 做校验
+├── .github/workflows/
+│   └── deploy.yml            # GitHub Actions：push 到 main 自动部署
 ├── wrangler.jsonc            # Cloudflare 部署配置
 └── package.json
 ```
@@ -109,7 +111,46 @@ node test/verify-output.cjs "outputs/7-9月交易明晰-CNY换算.xlsx"
 > 前提：Deploy to Cloudflare 按钮只支持 **Workers 应用**（本项目正是 Worker + 静态资源，不是 Pages 项目），
 > 且仓库必须是**公开**的 Git 仓库（github.com / gitlab.com）。
 
-### 方案 B：本地命令行部署
+### 方案 B：GitHub Actions 自动部署（push 即发布）
+
+仓库里已经放好工作流 `.github/workflows/deploy.yml` —— **push 到 `main` 就自动跑一次 `wrangler deploy`**，
+把最新代码发布到你自己账号下的 Worker。也可以在 Actions 页面手动触发。
+
+| 触发事件 | 行为 |
+| --- | --- |
+| push 到 `main` | 先跑单元测试，通过后执行 `wrangler deploy` 发布到线上 |
+| 向 `main` 提 PR | 只上传预览版本（`wrangler preview`），**不会动线上**，预览地址写在运行摘要里 |
+| 手动触发 | Actions 页面 → 选中工作流 → *Run workflow* |
+
+工作流内置了 `concurrency`，同一分支上新的推送会取消上一次未跑完的部署；测试不通过则不会发布。
+
+**首次使用需要配置 2 个仓库密钥**（Settings → Secrets and variables → Actions → New repository secret）：
+
+| Secret | 值 |
+| --- | --- |
+| `CLOUDFLARE_API_TOKEN` | 具备 **Workers Scripts:Edit** 权限的 API Token |
+| `CLOUDFLARE_ACCOUNT_ID` | 你的 Cloudflare Account ID（`npx wrangler whoami` 可查） |
+
+创建 API Token 的最短路径 —— 下面这个链接已经把**权限和账号预填好**，点开只需 *Continue to summary* → *Create Token*：
+
+<https://dash.cloudflare.com/profile/api-tokens?permissionGroupKeys=%5B%7B%22key%22%3A%22workers_scripts%22%2C%22type%22%3A%22edit%22%7D%5D&accountId=e4a57185c8f9ea8de6a1c8f4cd1c5681&name=github-actions-usd-cny-fx-converter>
+
+也可以直接用 Cloudflare 面板里的模板「**Edit Cloudflare Workers**」。
+
+写入密钥（用 `gh` 命令行，输入的值不会回显，也不会进 shell 历史）：
+
+```bash
+gh secret set CLOUDFLARE_API_TOKEN -R <你的账号>/usd-cny-fx-converter
+gh secret set CLOUDFLARE_ACCOUNT_ID -R <你的账号>/usd-cny-fx-converter
+```
+
+之后随便 push 一次 `main`，或到 Actions 页面手动跑一次即可。
+
+> **和方案 A 的区别**：方案 A 走 Cloudflare 自己的 Workers Builds，构建不在 GitHub 上跑；
+> 方案 B 走 GitHub Actions，日志、权限、触发条件都在你自己的 GitHub 仓库里，
+> 适合想统一在 GitHub 上看 CI，或后面要加 lint / 测试 / 多环境部署的场景。两者可以只选一个。
+
+### 方案 C：本地命令行部署
 
 ```bash
 npx wrangler login          # 首次需要授权
@@ -118,7 +159,7 @@ npx wrangler deploy
 
 部署完成后会得到 `https://usd-cny-fx-converter.<你的子域>.workers.dev`。
 
-### 方案 C：Cloudflare Pages
+### 方案 D：Cloudflare Pages
 
 ```bash
 npx wrangler pages deploy public --project-name=usd-cny-fx-converter
@@ -132,7 +173,7 @@ npx wrangler pages deploy public --project-name=usd-cny-fx-converter
 | Build command | 留空 |
 | Build output directory | `public` |
 
-### 方案 D：拖拽上传
+### 方案 E：拖拽上传
 
 Cloudflare 控制台 → Workers & Pages → Create → Pages → **Upload assets**，
 直接把 `public/` 目录整个拖上去即可。
