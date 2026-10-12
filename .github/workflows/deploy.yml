@@ -10,9 +10,6 @@ on:
     branches: [main]
   workflow_dispatch:
 
-permissions:
-  contents: read
-
 # 同一分支上的部署串行化，新的一次推送会取消上一次未跑完的部署
 concurrency:
   group: deploy-${{ github.ref }}
@@ -23,6 +20,8 @@ jobs:
   test:
     name: 单元测试
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - name: 检出代码
         uses: actions/checkout@v7
@@ -41,6 +40,9 @@ jobs:
     needs: test
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      deployments: write # wrangler-action 需要它来写 GitHub Deployment 记录
     steps:
       - name: 检出代码
         uses: actions/checkout@v7
@@ -51,6 +53,7 @@ jobs:
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          gitHubToken: ${{ secrets.GITHUB_TOKEN }}
           wranglerVersion: "4"
           command: deploy
 
@@ -66,6 +69,9 @@ jobs:
     needs: test
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      deployments: write
     steps:
       - name: 检出代码
         uses: actions/checkout@v7
@@ -76,8 +82,9 @@ jobs:
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          gitHubToken: ${{ secrets.GITHUB_TOKEN }}
           wranglerVersion: "4"
-          command: preview
+          command: preview --name pr-${{ github.event.pull_request.number }}
 
       - name: 输出预览地址
         run: |
